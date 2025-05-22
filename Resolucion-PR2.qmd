@@ -1,0 +1,190 @@
+---
+title: "Resolución PR2"
+authors:
+  - Alejandro Caravaca Puchades
+  - Andrea Vigo Ruíz
+format:
+  html:
+    toc: true
+    df-print: paged
+    number-sections: true
+---
+
+```{r}
+library(caret)
+library(ggplot2)
+library(naniar)
+library(stopwords)
+library(tidytext)
+library(tidyverse)
+library(wordcloud2)
+```
+
+```{python}
+import pandas as pd
+from rpy2 import robjects
+from rpy2.robjects import r, pandas2ri
+```
+
+```{r}
+datos <- read_csv("data/idealista-sale-properties-spain.csv")
+```
+
+```{r}
+dim(datos)
+```
+
+```{r}
+n_distinct(datos)
+```
+
+# Descripción del dataset
+
+**¿Por qué es importante y qué pregunta/problema pretende responder? Resume brevemente las variables que lo forman y su tamaño.**
+
+```{r}
+head(datos)
+```
+
+```{r}
+str(datos)
+```
+
+```{r}
+#| cached: true
+features_words <- datos |>
+  unnest_tokens(word, features) |>
+  filter(!word %in% c(0:9,stopwords("es"))) |>
+  count(word, sort = TRUE)
+
+head(features_words)
+```
+
+```{r}
+#| cached: true
+description_words <- datos |>
+  unnest_tokens(word, description) |>
+  filter(!word %in% c(0:9,stopwords("es"))) |>
+  count(word, sort = TRUE)
+
+wordcloud2(description_words)
+```
+
+# Integración y selección de los datos de interés a analizar
+
+**Puede ser el resultado de adicionar diferentes datasets o una subselección útil de los datos originales, en base al objetivo que se quiera conseguir. Si se decide trabajar con una selección de los datos, es muy importante que esta esté debidamente justificada. Además, se recomienda mostrar un resumen de los datos que permita ver a simple vista las diferentes variables y sus rangos de valores.**
+
+Como hemos visto, en el conjunto de datos encontramos una serie de campos de texto libre. Aunque este tipo de campos permiten una gran flexibilidad a la hora de almacenar información, añaden cierta complejidad al análisis. A continuación, extraeremos una serie de campos estructurados a partir de la información que hemos obtenido del análisis de texto anterior:
+
+```{r}
+datos_ext <- datos |>
+  mutate(
+    calle = str_extract(address, "^[^,]+(,\\s*[0-9]+\\s*)*"),
+    region_provincia = str_remove(address, "^[^,]+(,\\s*[0-9]+\\s*)*,")
+  ) |>
+  separate_wider_delim(
+    region_provincia,
+    delim = ",",
+    names=c("distrito", "ciudad", "provincia"),
+    too_many = "merge",
+    too_few = "align_end",
+  ) |>
+  mutate(
+    across(c(calle, distrito, ciudad, provincia), str_trim),
+    superficie = features |>
+      str_to_lower() |>
+      str_extract("([0-9]+) m²", group=1),
+    habitaciones = features |>
+      str_to_lower() |>
+      str_extract("([0-9]+) hab.", group=1),
+    piso = case_when(
+      features |> str_to_lower() |> str_detect("bajo") ~ "B",
+      features |> str_to_lower() |> str_detect("entreplanta") ~ "E",
+      TRUE ~ features |> str_to_lower() |> str_extract("planta ([0-9]+)[ºª]", group=1),
+    ),
+    ascensor = features |>
+      str_to_lower() |>
+      str_extract("(con|sin) ascensor", group=1) |>
+      case_match("con" ~ TRUE, "sin" ~ FALSE, .default=FALSE),
+    exterior = features |>
+      str_to_lower() |>
+      str_extract("(exterior|interior)", group=1) |>
+      case_match("exterior" ~ TRUE, "interior" ~ FALSE, .default=FALSE),
+    garaje = features |> str_to_lower() |> str_detect("garaje"),
+  )
+```
+
+# Limpieza de los datos
+
+**¿Los datos contienen ceros, elementos vacíos u otros valores numéricos que indiquen la pérdida de datos? Gestiona cada uno de estos casos utilizando el método de imputación que consideres más adecuado.**
+
+**Identifica y gestiona adecuadamente el tipo de dato de cada atributo (p.ej. conversión de variables categóricas en factor).**
+
+**Identifica y gestiona los valores extremos.**
+
+**Justifica la necesidad de otros métodos de limpieza para este dataset en particular y, de ser necesario, aplícalos.**
+
+> **Nota**: se ha decidido contestar los apartados anteriores en un orden diferente al que aparecen en el enunciado con el objetivo de facilitar la tarea y su comprensión. En este caso, se ha decidido primero transformar los datos a un formato más adecuado para su análisis y después aplicar las técnicas de limpieza e imputación de datos.
+
+Tal y como veíamos en primer lugar, el dataset contiene una serie de variables almacenadas en formato de cadena y que deberían transformarse en variables numéricas o factores, previo a analizar sus correspondientes rangos y niveles, así como valores extremos:
+
+```{r}
+datos_conv <- datos_ext |>
+  mutate(
+    property_id = as.character(property_id),
+    price = price |> str_remove("\\.") |> as.numeric(),
+    price_m2 = price_m2 |> str_remove("\\.") |> str_remove(" €/m²") |> as.numeric(),
+    superficie = as.numeric(superficie),
+    across(c(distrito, ciudad, provincia, piso), ~ .x |> str_to_upper() |> as.factor()),
+    across(c(habitaciones), as.integer),
+    across(c(ascensor, exterior, garaje), as.logical),
+  )
+```
+
+Vamos en primer lugar a hacer un análisis preliminar de las características de los datos, atendiendo especialmente al rango de datos en las variables numéricas:
+
+```{r}
+summary(datos_conv |> select(where(is.numeric)))
+```
+
+Llama la atención el valor máximo de las variables _energy_consumption_ y _energy_emissions_, en particular su valor máximo (9999) se aleja mucho de la media y la mediana correspondientes. Vamos a comprobar la existencia de valores extremos:
+
+```{r}
+datos_conv |>
+  select(where(is.numeric)) |>
+  pivot_longer(everything()) |>
+  ggplot(aes(x = value)) +
+    geom_histogram(bins=20) +
+    facet_wrap(~name, scales="free")
+```
+
+De los histogramas anteriores parece desprenderse que la mayoría de las variables numéricas muestran una distribución con una marcada desviación hacia la derecha. Llama la atención la existencia de entradas con valor cero para las variables _price_ (`r sum(datos_conv$price==0)` entradas) y _price_m2_ (`r sum(datos_conv$price_m2 == 0)` entradas).
+
+```{r}
+datos_conv <- mutate(datos_conv, across(c(price, price_m2), ~ na_if(.x, 0)))
+```
+
+```{r}
+vis_miss(datos_conv)
+```
+
+Queda claro que la mayoría de los valores perdidos pertenecen a las variables _energy_consumption_ y _energy_emissions_, seguidos de las variables _piso_, _distrito_ y _ciudad_.
+
+# Análisis de los datos
+
+```{python}
+datos = pandas2ri.rpy2py(r['datos'])
+datos.head()
+```
+
+**Aplica un modelo supervisado y uno no supervisado a los datos y comenta los resultados obtenidos.**
+
+**Aplica una prueba por contraste de hipótesis. Ten en cuenta que algunas de estas pruebas requieren verificar previamente la normalidad y homocedasticidad de los datos.**
+
+# Representación de los resultados a partir de tablas y gráficas
+
+**Este apartado se puede responder a lo largo de la práctica, sin necesidad de concentrar todas las representaciones en este apartado. Se debe representar tanto el contenido del dataset para observar las proporciones y distribuciones de las diferentes variables una vez aplicada la etapa de limpieza, como los resultados obtenidos tras la etapa de análisis.**
+
+# Resolución del problema.
+
+**A partir de los resultados obtenidos, ¿cuáles son las conclusiones? ¿Los resultados permiten responder al problema?**
