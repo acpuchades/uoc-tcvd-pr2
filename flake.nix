@@ -13,6 +13,7 @@
 			r-packages = with pkgs.rPackages; [
 				caret
 				ggplot2
+				missRanger
 				naniar
 				quarto
 				reticulate
