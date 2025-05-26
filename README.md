@@ -8,9 +8,16 @@ Estructura del repositorio
 
 .
 ├── data/
-│ └── [Archivos de datos utilizados en el análisis]
+│ └── idealista-sale-properties-spain.csv
+├── output/
+│ └── idealista-sale-properties-spain_processed.csv
 ├── sources/
-│ └── [Funciones y scripts auxiliares en R]
+│ ├── data_pipeline.py # Pipeline Scikit-Learn con preprocesamiento adicional
+│ ├── idealista-data.r # Preprocesamiento de los datos en R
+│ ├── idealista_data.py # Carga de los datos tras la imputación
+│ ├── stat_tests.py # Pruebas estadísticas de los datos en Python
+│ ├── supervised_models.py # Modelos supervisados de Scikit-Learn
+│ └── unsupervised_models.py # Modelos no supervisados de Scikit-Learn
 ├── Resolucion-PR2.qmd # Documento Quarto con el análisis
 ├── Resolucion-PR2.html # Versión renderizada del informe
 ├── flake.nix # Entorno reproducible con Nix
