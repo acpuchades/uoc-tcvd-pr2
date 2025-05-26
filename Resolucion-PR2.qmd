@@ -247,7 +247,7 @@ Queda claro que la mayoría de los valores perdidos pertenecen a las variables _
 #| cache: true
 datos_imp <- missRanger(
   datos_conv, data_only = TRUE,
-  formula = price + superficie + energy_consumption + energy_emissions +
+  formula = superficie + energy_consumption + energy_emissions +
             piso + ascensor + garaje + exterior + habitaciones +
             calle + barrio + distrito + ciudad + provincia ~
     . - title - description - features - property_id - property_url
@@ -259,6 +259,26 @@ datos_imp <- missRanger(
 ```{r}
 vis_miss(datos_imp)
 ```
+
+Una vez hemos realizado la imputación de las variables predictoras, comprobemos ahora la distribución de las variable a predecir:
+
+```{r}
+hist(datos_imp$price)
+```
+
+Encontramos que la distribución es muy sesgada hacia la derecha, por lo que vamos a aplicar una transformación de la variable para reducir su asimetría. En este caso, vamos a aplicar una transformación de la familia Box-Cox, que es adecuada para variables con distribuciones sesgadas. Tal y como veremos posteriormente, la transformación necesaria en nuestro caso es la transformación Box-Cox con $\lambda=\dfrac{1}{4}$:
+
+```{r}
+hist(datos_imp$price ^ (1/4))
+```
+
+Encontamos que la variable precio incluso tras ser transformada, parece seguir una distribución bimodal, lo cual probablemente afectará el rendimiento de nuestro modelo. Veamos si podemos superar este escollo utilizando la variable price_m2 en su lugar:
+
+```{r}
+hist(datos_imp$price_m2^(1/4))
+```
+
+Observamos que la distribución de la variable de price_m2 es mucho más simétrica, por lo que la utilizaremos como variable a predecir en lugar de la variable price. Si el precio del inmueble es lo que nos interesa, podremos posteriormente multiplicar la variable price_m2 predicha por la superficie de cada inmueble.
 
 # Análisis de los datos
 
@@ -272,10 +292,11 @@ import matplotlib.pyplot as plt
 
 ```{python}
 from rpy2 import robjects
-from rpy2.robjects import r, pandas2ri
+from rpy2.robjects import r, pandas2ri, Environment
 
 pandas2ri.activate()
 datos = pandas2ri.rpy2py(r['datos_imp'])
+datos = datos[~datos.price_m2.isna()]
 datos.head()
 ```
 
@@ -287,7 +308,7 @@ datos_X = datos[[
   "calle", "barrio", "distrito", "ciudad", "provincia"
 ]]
 
-datos_y = datos["price"]
+datos_y = datos["price_m2"]
 
 X_train, X_test, y_train, y_test = train_test_split(
     datos_X, datos_y, test_size=0.2, random_state=1234
@@ -295,6 +316,8 @@ X_train, X_test, y_train, y_test = train_test_split(
 ```
 
 **Aplica un modelo supervisado y uno no supervisado a los datos y comenta los resultados obtenidos.**
+
+En primer lugar, desarrollaremos un modelo de regresión con el objetivo de predecir el precio de mercado en función de las características del inmueble. Dada la naturaleza tabular de nuestros datos, probaremos dos modelos diferentes que suelen presentar un buen desempeño en este tipo de conjuntos de datos: un modelo de regresión basado en árboles de decisión y otro basado en _gradient boosting_.
 
 ```{python}
 from sklearn.pipeline import make_pipeline
@@ -307,6 +330,12 @@ categorical_features = [
   'calle', 'barrio', 'distrito', 'ciudad', 'provincia'
 ]
 
+def boxcox_transform(lam):
+    return lambda x: (np.power(x, lam) - 1) / lam
+
+def inv_boxcox_transform(lam):
+    return lambda y: np.power((lam * y) + 1, 1 / lam)
+
 preprocessor = make_column_transformer(
   (StandardScaler(), numeric_features),
   (OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical_features),
@@ -317,6 +346,33 @@ preprocessor = make_column_transformer(
 #| cache: true
 
 from sklearn.pipeline import make_pipeline
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.metrics import root_mean_squared_error, r2_score
+
+dt_model = make_pipeline(
+  preprocessor,
+  DecisionTreeRegressor(max_depth=10, random_state=123),
+)
+
+dt_model_t = TransformedTargetRegressor(
+    regressor=dt_model,
+    func=boxcox_transform(1/4),
+    inverse_func=inv_boxcox_transform(1/4)
+)
+
+dt_model_t.fit(X_train, y_train)
+y_pred = dt_model_t.predict(X_test)
+
+print("RMSE:", root_mean_squared_error(y_test, y_pred))
+print("R²:", r2_score(y_test, y_pred))
+```
+
+```{python}
+#| cache: true
+
+from sklearn.pipeline import make_pipeline
+from sklearn.compose import TransformedTargetRegressor
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import root_mean_squared_error, r2_score
 
@@ -326,41 +382,44 @@ gbr_model = make_pipeline(
                                 max_depth=10, random_state=123),
 )
 
-gbr_model.fit(X_train, y_train)
-y_pred = gbr_model.predict(X_test)
+gbr_model_t = TransformedTargetRegressor(
+    regressor=gbr_model,
+    func=boxcox_transform(1/4),
+    inverse_func=inv_boxcox_transform(1/4)
+)
+
+gbr_model_t.fit(X_train, y_train)
+y_pred = gbr_model_t.predict(X_test)
 
 print("RMSE:", root_mean_squared_error(y_test, y_pred))
 print("R²:", r2_score(y_test, y_pred))
+```
 
-fig, ax = plt.subplots()
-ax.scatter(x=y_pred, y=y_test, s=3, alpha=0.2)
-ax.set_xlabel("Predicción del precio")
-ax.set_ylabel("Precio real")
+```{python}
+plt.figure(figsize=(6, 4))
+plt.scatter(x=y_pred, y=y_test, s=3, alpha=0.2)
+plt.axline((0, 0), (1, 1), color='gray', linestyle='--')
+plt.xlabel("Predicción del precio/m2")
+plt.ylabel("Precio/m2 real")
 plt.show()
 ```
 
 ```{python}
-#| cache: true
+y_resid = y_test - y_pred
 
-from sklearn.pipeline import make_pipeline
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import root_mean_squared_error, r2_score
-
-rf_model = make_pipeline(
-  preprocessor,
-  RandomForestRegressor(n_estimators=500, random_state=123),
-)
-
-rf_model.fit(X_train, y_train)
-y_pred = rf_model.predict(X_test)
-
-print("RMSE:", root_mean_squared_error(y_test, y_pred))
-print("R²:", r2_score(y_test, y_pred))
+plt.figure(figsize=(6, 4))
+sns.scatterplot(x=y_pred, y=y_resid, s=3, alpha=0.5)
+plt.axhline(0, color='gray', linestyle='--')
+plt.xlabel("Predicted price/m²")
+plt.ylabel("Residual")
+plt.title("Residuals vs. Predicted")
+plt.tight_layout()
+plt.show()
 ```
 
 **Aplica una prueba por contraste de hipótesis. Ten en cuenta que algunas de estas pruebas requieren verificar previamente la normalidad y homocedasticidad de los datos.**
 
-Durante una de nuestras numerosas reuniones internas, uno de nuestros asesores inmobiliarios mencionó que, en su experiencia, las propiedades con ascensor tienden a tener un precio por metro cuadrado más alto que aquellas sin ascensor. Otro de nuestros asesores, sin embargo, argumentó que esta diferencia no es significativa y que el precio por metro cuadrado depende más de la ubicación y otras características de la propiedad.
+Durante una de nuestras numerosas y tediosas reuniones internas, uno de nuestros asesores inmobiliarios mencionó que, en su experiencia, las propiedades con ascensor tienden a tener un precio por metro cuadrado más alto que aquellas sin ascensor. Otro de nuestros asesores, sin embargo, argumentó que esta diferencia no es significativa y que el precio por metro cuadrado depende más de la ubicación y otras características de la propiedad.
 
 Puesto que nos caracterizamos por ser una organización orientada al dato, pretendemos resolver esta cuestión de forma objetiva, utilizando una prueba estadística que nos permita determinar si existe una diferencia significativa en el precio por metro cuadrado entre las propiedades con y sin ascensor.
 
