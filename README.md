@@ -11,6 +11,7 @@ El tratamiento de los datos se ha realizado de manera integrada por parte de amb
 
 # Estructura del repositorio
 
+```
 .
 ├── data/
 │ └── idealista-sale-properties-spain.csv
@@ -29,6 +30,7 @@ El tratamiento de los datos se ha realizado de manera integrada por parte de amb
 ├── flake.lock # Lockfile del entorno Nix
 ├── .envrc # Configuración para direnv
 └── .gitignore # Archivos ignorados por Git
+```
 
 # Requisitos previos
 
