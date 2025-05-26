@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
+import seaborn as sns
 import matplotlib.pyplot as plt
+
 from sklearn.manifold import TSNE
 from sklearn.pipeline import make_pipeline
 

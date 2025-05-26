@@ -59,8 +59,10 @@ Alternativamente, se requiere tener instalados los siguientes paquetes:
 
 - matplotlib
 - pandas
+- numpy
 - rpy2
 - scikit-learn
+- scipy
 - seaborn
 - statsmodels
 
