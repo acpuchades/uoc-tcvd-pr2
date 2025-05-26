@@ -40,6 +40,30 @@ La manera más sencilla de ejecutar correctamente el proyecto requiere lo siguie
 - Tener instalado [direnv](https://direnv.net/docs/installation.html).
 - Tener instalado [Quarto](https://quarto.org/docs/get-started/).
 
+Alternativamente, se requiere tener instalados los siguientes paquetes:
+
+**Código en R**:
+
+- caret
+- ggplot2
+- missRanger
+- naniar
+- quarto
+- reticulate
+- stopwords
+- tidytext
+- tidyverse
+- wordcloud2
+
+**Código en Python**:
+
+- matplotlib
+- pandas
+- rpy2
+- scikit-learn
+- seaborn
+- statsmodels
+
 # Instrucciones de ejecución
 
 1. Clonar el repositorio
