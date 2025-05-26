@@ -4,7 +4,12 @@ Este repositorio contiene la resolución de la Práctica 2 (PR2) de la asignatur
 
 El objetivo de la práctica es el análisis y modelado de un conjunto de datos del portal inmobiliario Idealista, con el fin de construir un sistema capaz de estimar el valor de los inmuebles en función de sus características.
 
-Estructura del repositorio
+El tratamiento de los datos se ha realizado de manera integrada por parte de ambos integrantes del equipo:
+
+- Alejandro Caravaca Puchades
+- Andrea Vigo Ruíz
+
+# Estructura del repositorio
 
 .
 ├── data/
