@@ -12,8 +12,8 @@ print(f"Normality test for property prices: {res[1]:.3f}")
 
 ## NON-PARAMETRIC MANN-WHITNEY'S U TEST
 
-lift_properties = datos[datos.ascensor == 2]
-nolift_properties = datos[datos.ascensor == 1]
+lift_properties = datos[datos.ascensor == 'S']
+nolift_properties = datos[datos.ascensor == 'N']
 res = nonp.rank_compare_2indep(lift_properties['price_m2'], nolift_properties['price_m2'])
 print(f"Mann-Whitney's U rank-sum test: W={res.statistic:.3f}, p-value={res.pvalue:.3f}")
 

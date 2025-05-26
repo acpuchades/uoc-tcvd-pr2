@@ -7,7 +7,7 @@ datos = pd.read_csv("output/idealista-sale-properties-spain_processed.csv")
 datos = datos[~datos.price_m2.isna()]
 
 datos_X = datos[[
-  "superficie", "habitaciones", "piso", "ascensor", "exterior", "garaje",
+  "superficie", "habitaciones", "piso", "ascensor", "exterior", "garaje", "terraza",
   "calle", "barrio", "distrito", "ciudad", "provincia",
   "energy_consumption", "energy_emissions",
 ]]
